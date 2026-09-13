@@ -75,8 +75,8 @@ array) follows this schema:
 | `age_range`            | string  | Eligible age range (e.g. `"16-24"`, `"All Ages"`)                    |
 | `walk_in_allowed`      | boolean | Whether people can access services without an appointment           |
 | `confidential_support` | boolean | Whether the service guarantees confidential support                 |
-| `latitude`             | float   | Latitude for map placement                                           |
-| `longitude`            | float   | Longitude for map placement                                          |
+| `latitude`             | float   | Approximate latitude for map placement (see note below)             |
+| `longitude`            | float   | Approximate longitude for map placement (see note below)            |
 | `is_sample`            | boolean | `true` if this is placeholder/demo data, not a verified real-world resource |
 | `source_url`           | string  | Link to the organization's official page confirming these details    |
 | `last_verified`        | string  | `YYYY-MM-DD` date this entry's details were last checked against the source |
@@ -93,6 +93,19 @@ website), alongside placeholder Pacific Northwest entries kept for
 demonstration purposes and clearly labeled as sample data. Before relying
 on any entry, confirm details are current — organizations change hours,
 addresses, and phone numbers. Report outdated entries by opening an issue
+
+**A note on map precision.** The `latitude`/`longitude` values for the
+verified Texas entries were placed by hand from the street address (no
+geocoding API was available when this dataset was built), so a pin can be
+off by a block or two — treat the map as a rough locator, not a precision
+GPS fix. The verified `address` string itself is authoritative. For that
+reason, every resource — in the directory list and in its map popup —
+also has a **🧭 Directions** link that hands the exact address to Google
+Maps, which geocodes it live at click time. That link is accurate
+regardless of this dataset's own coordinate precision; if you re-import
+this data elsewhere, consider running the addresses through a proper
+geocoder (e.g. Census Bureau or Nominatim) to tighten the stored
+coordinates too.
 or updating `data/resources.json` directly.
 
 The loader in `app.py` fills in sensible defaults for any missing or
