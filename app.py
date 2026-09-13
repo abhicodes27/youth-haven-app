@@ -1,6 +1,7 @@
 """Youth Haven: Emergency Resource Finder for Displaced Youth."""
 
 import json
+import re
 from pathlib import Path
 
 import folium
@@ -47,6 +48,21 @@ st.set_page_config(
 )
 
 
+def parse_age_range(age_range: str) -> tuple:
+    """Convert an age_range string like '16-24' or 'All Ages' into a (min, max) tuple."""
+    if not isinstance(age_range, str):
+        return (0, 120)
+    text = age_range.strip().lower()
+    if "all" in text:
+        return (0, 120)
+    numbers = re.findall(r"\d+", text)
+    if len(numbers) >= 2:
+        return (int(numbers[0]), int(numbers[1]))
+    if len(numbers) == 1:
+        return (int(numbers[0]), 120)
+    return (0, 120)
+
+
 @st.cache_data
 def load_resources(path: Path) -> pd.DataFrame:
     """Load and sanitize the resource dataset, filling in gaps gracefully."""
@@ -77,6 +93,9 @@ def load_resources(path: Path) -> pd.DataFrame:
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
     df["walk_in_allowed"] = df["walk_in_allowed"].astype(bool)
     df["confidential_support"] = df["confidential_support"].astype(bool)
+    age_bounds = df["age_range"].apply(parse_age_range)
+    df["age_min"] = age_bounds.apply(lambda t: t[0])
+    df["age_max"] = age_bounds.apply(lambda t: t[1])
     return df
 
 
@@ -109,32 +128,69 @@ def render_header():
         )
     with nav_right:
         st.write("")
-        if st.button("🚪 Quick Exit", help="Immediately leave this site and clear your session", use_container_width=True, type="primary"):
+        if st.button(
+            "🚪 Quick Exit",
+            help="Clears your filters and this session, then leaves the site.",
+            use_container_width=True,
+            type="primary",
+        ):
             quick_exit()
+        st.caption("Doesn't clear browser history — use private browsing for that.")
 
     st.markdown(
-        """
-        > **You are not alone.** Youth Haven helps young people facing housing
-        > instability, sudden displacement, or homelessness find immediate
-        > shelter, food, legal aid, and crisis support — instantly, safely,
-        > and without tracking, saving, or sharing your personal data.
-        > Every search here disappears when you leave.
-        """
+        "**You are not alone.** Youth Haven helps you find shelter, food, "
+        "legal aid, and crisis support near you — quickly, and without "
+        "creating an account."
     )
+
+    with st.expander("🔒 What this site does and doesn't do with your data"):
+        st.markdown(
+            """
+            - This app does **not** ask for your name, create an account, or
+              save your searches. Your filter choices live only in this
+              browser tab and are cleared when you close it or click
+              **Quick Exit**.
+            - This app does **not** use tracking cookies or analytics scripts.
+            - That said, no website can promise total invisibility: the
+              hosting provider and your network (Wi-Fi, ISP, or workplace)
+              can typically see that you visited this page, the same as any
+              site you load. The interactive map also loads map tiles from
+              OpenStreetMap, an external service, which may log that
+              request like any embedded image.
+            - **Quick Exit** clears this app's session and sends you to
+              Google — it does **not** erase your browser history. If you
+              need to hide that you visited, use a private/incognito window
+              and clear your history afterward.
+            """
+        )
     st.divider()
 
 
-def render_filters(df: pd.DataFrame) -> pd.DataFrame:
+def render_filters(df: pd.DataFrame) -> dict:
     st.sidebar.header("🔎 Find What You Need")
     st.sidebar.caption("Filters help narrow results. Nothing you select is stored or sent anywhere.")
 
     categories = sorted(df["category"].dropna().unique().tolist()) if not df.empty else []
-    cities = sorted(df["city"].dropna().unique().tolist()) if not df.empty else []
-    age_ranges = sorted(df["age_range"].dropna().unique().tolist()) if not df.empty else []
-
     selected_categories = st.sidebar.multiselect("Category", options=categories, default=categories)
-    selected_cities = st.sidebar.multiselect("City", options=cities, default=cities)
-    selected_ages = st.sidebar.multiselect("Age Range", options=age_ranges, default=age_ranges)
+
+    location_input = st.sidebar.text_input(
+        "Your city or ZIP code (optional)",
+        value="",
+        help="We currently match this against each resource's city name.",
+    )
+
+    age_input = st.sidebar.text_input(
+        "Your age (optional)",
+        value="",
+        help="Enter your age and we'll only show resources you're eligible for.",
+    )
+    user_age = None
+    if age_input.strip():
+        try:
+            user_age = int(age_input.strip())
+        except ValueError:
+            st.sidebar.warning("Please enter your age as a number.")
+
     walk_in_only = st.sidebar.checkbox("Walk-ins only", value=False)
 
     st.sidebar.divider()
@@ -146,57 +202,28 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
     filtered = df.copy()
     if selected_categories:
         filtered = filtered[filtered["category"].isin(selected_categories)]
-    if selected_cities:
-        filtered = filtered[filtered["city"].isin(selected_cities)]
-    if selected_ages:
-        filtered = filtered[filtered["age_range"].isin(selected_ages)]
+    if location_input.strip():
+        term = location_input.strip().lower()
+        filtered = filtered[filtered["city"].str.lower().str.contains(term, na=False)]
+    if user_age is not None:
+        filtered = filtered[(filtered["age_min"] <= user_age) & (filtered["age_max"] >= user_age)]
     if walk_in_only:
         filtered = filtered[filtered["walk_in_allowed"]]
 
-    return filtered
+    return {
+        "filtered": filtered,
+        "location_input": location_input.strip(),
+        "user_age": user_age,
+    }
 
 
-def render_map(df: pd.DataFrame):
-    st.subheader("📍 Nearby Resources")
-
-    mappable = df.dropna(subset=["latitude", "longitude"])
-    if mappable.empty:
-        st.info("No mappable resources match your current filters. Try adjusting them in the sidebar.")
-        return
-
-    center_lat = mappable["latitude"].mean()
-    center_lon = mappable["longitude"].mean()
-    fmap = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=10,
-        tiles="OpenStreetMap",
-    )
-
-    for _, row in mappable.iterrows():
-        color = CATEGORY_COLORS.get(row["category"], "gray")
-        popup_html = (
-            f"<b>{row['name']}</b><br>"
-            f"{row['category']}<br>"
-            f"{row['address']}, {row['city']}<br>"
-            f"Hours: {row['operating_hours']}<br>"
-            f"Phone: {row['phone']}<br>"
-            f"Walk-ins: {'Yes' if row['walk_in_allowed'] else 'No'}"
-        )
-        folium.Marker(
-            location=[row["latitude"], row["longitude"]],
-            popup=folium.Popup(popup_html, max_width=280),
-            tooltip=row["name"],
-            icon=folium.Icon(color=color, icon="info-sign"),
-        ).add_to(fmap)
-
-    st_folium(fmap, width=None, height=480, returned_objects=[])
-
-
-def render_directory(df: pd.DataFrame):
-    st.subheader("📇 Resource Directory")
+def render_directory(df: pd.DataFrame, location_input: str):
+    heading = f"📋 Resources Near \"{location_input}\"" if location_input else "📋 Available Resources"
+    st.subheader(heading)
+    st.caption(f"{len(df)} resource(s) match your filters.")
 
     if df.empty:
-        st.warning("No resources match your current filters.")
+        st.warning("No resources match your current filters. Try adjusting them in the sidebar.")
         return
 
     search_term = st.text_input("Search by name, city, or address", value="")
@@ -237,11 +264,53 @@ def render_directory(df: pd.DataFrame):
                     st.button("📞 No phone", disabled=True, use_container_width=True, key=f"nophone_{row['id']}")
 
 
+def render_map(df: pd.DataFrame, location_input: str):
+    heading = f"📍 Map of Resources Near \"{location_input}\"" if location_input else "📍 Map of All Resources"
+    st.subheader(heading)
+
+    mappable = df.dropna(subset=["latitude", "longitude"])
+    if mappable.empty:
+        st.info("No mappable resources match your current filters. Try adjusting them in the sidebar.")
+        return
+
+    center_lat = mappable["latitude"].mean()
+    center_lon = mappable["longitude"].mean()
+    fmap = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=10,
+        tiles="OpenStreetMap",
+    )
+
+    for _, row in mappable.iterrows():
+        color = CATEGORY_COLORS.get(row["category"], "gray")
+        popup_html = (
+            f"<b>{row['name']}</b><br>"
+            f"{row['category']}<br>"
+            f"{row['address']}, {row['city']}<br>"
+            f"Hours: {row['operating_hours']}<br>"
+            f"Phone: {row['phone']}<br>"
+            f"Walk-ins: {'Yes' if row['walk_in_allowed'] else 'No'}"
+        )
+        folium.Marker(
+            location=[row["latitude"], row["longitude"]],
+            popup=folium.Popup(popup_html, max_width=280),
+            tooltip=row["name"],
+            icon=folium.Icon(color=color, icon="info-sign"),
+        ).add_to(fmap)
+
+    st_folium(fmap, width=None, height=420, returned_objects=[])
+
+
 def render_analytics(df: pd.DataFrame):
-    st.subheader("📊 Regional Resource Overview")
+    st.subheader("📊 Project Coverage Stats")
+    st.caption(
+        "This tab is about the dataset, not your personal search — it summarizes "
+        "how many resources of each type are in Youth Haven's directory and where "
+        "they're located, filtered by whatever you've selected in the sidebar."
+    )
 
     if df.empty:
-        st.info("No data available to display analytics.")
+        st.info("No data available to display statistics for the current filters.")
         return
 
     col1, col2 = st.columns(2)
@@ -308,21 +377,24 @@ def main():
         )
         return
 
-    filtered_df = render_filters(resources_df)
+    filter_result = render_filters(resources_df)
+    filtered_df = filter_result["filtered"]
+    location_input = filter_result["location_input"]
 
-    tab_find, tab_analytics = st.tabs(["🧭 Find Resources", "📈 Analytics"])
+    tab_find, tab_about = st.tabs(["🧭 Find Resources", "📊 About & Coverage Stats"])
 
     with tab_find:
-        render_map(filtered_df)
+        render_directory(filtered_df, location_input)
         st.divider()
-        render_directory(filtered_df)
+        with st.expander("🗺️ Show map (optional)", expanded=False):
+            render_map(filtered_df, location_input)
 
-    with tab_analytics:
+    with tab_about:
         render_analytics(filtered_df)
 
     st.divider()
     st.caption(
-        "Youth Haven does not collect, store, or share any personal data. "
+        "Youth Haven does not create accounts or save your searches. "
         "If you are in immediate danger, call 911. For confidential crisis support, "
         "call or text 988."
     )
