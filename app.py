@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -88,6 +89,16 @@ def directions_url(address: str, city: str) -> str:
 def phone_digits(phone: str) -> str:
     """Extract a tel:-safe digit string (keeping a leading +) from a phone field."""
     return "".join(ch for ch in str(phone) if ch.isdigit() or ch == "+")
+
+
+def format_verified_date(last_verified: str) -> str:
+    """Render a stored YYYY-MM-DD date as 'Month D, YYYY'; falls back to the raw string."""
+    if not last_verified:
+        return ""
+    try:
+        return datetime.strptime(last_verified, "%Y-%m-%d").strftime("%B %-d, %Y")
+    except ValueError:
+        return last_verified
 
 
 def apply_filters(
@@ -193,12 +204,6 @@ def render_header():
         "legal aid, and crisis support near you — quickly, and without "
         "creating an account."
     )
-    st.markdown(
-        "Includes verified, sourced resources in Frisco, Plano, McKinney, "
-        "and Dallas, TX. Fictional sample/demo listings used to prototype "
-        "this project live separately in the **🧪 Demo Data** tab and are "
-        "never mixed into real search results."
-    )
 
     with st.expander("🔒 What this site does and doesn't do with your data"):
         st.markdown(
@@ -278,23 +283,69 @@ def render_filters(df: pd.DataFrame) -> dict:
         "location_input": location_input.strip(),
         "user_age": user_age,
         "known_cities": known_cities,
+        "selected_categories": selected_categories,
+        "all_categories": categories,
+        "walk_in_only": walk_in_only,
     }
 
 
-def render_directory(df: pd.DataFrame, location_input: str, known_cities=None, key_prefix: str = "find"):
+def describe_no_results(filters: dict, known_cities=None) -> str:
+    """Build a specific, actionable empty-state message naming which active
+    filters are narrowing the results and how to broaden each one."""
+    known_cities = known_cities or []
+    location = filters.get("location_input") or ""
+    age = filters.get("user_age")
+    selected = filters.get("selected_categories") or []
+    all_cats = filters.get("all_categories") or []
+    walk_in_only = filters.get("walk_in_only", False)
+    category_limited = bool(selected) and bool(all_cats) and set(selected) != set(all_cats)
+
+    active = []
+    if location:
+        active.append(f'city/ZIP "{location}"')
+    if age is not None:
+        active.append(f"age {age}")
+    if category_limited:
+        active.append(f"category limited to {', '.join(sorted(selected))}")
+    if walk_in_only:
+        active.append('"Walk-ins only"')
+
+    if not active:
+        return "No resources match your current filters. Try adjusting them in the sidebar."
+
+    msg = f"No resources match {', '.join(active)}. "
+    suggestions = []
+    if location:
+        if known_cities:
+            suggestions.append(
+                f"try a nearby city ({', '.join(known_cities)}) or clear the city/ZIP field"
+            )
+        else:
+            suggestions.append("clear the city/ZIP field")
+    if age is not None:
+        suggestions.append("clear the age field to see options for other ages")
+    if category_limited:
+        suggestions.append("select more categories")
+    if walk_in_only:
+        suggestions.append('uncheck "Walk-ins only"')
+    msg += "Try: " + "; ".join(suggestions) + "."
+    return msg
+
+
+def render_directory(
+    df: pd.DataFrame,
+    location_input: str,
+    known_cities=None,
+    key_prefix: str = "find",
+    filters: dict = None,
+):
     known_cities = known_cities or []
     heading = f"📋 Resources Near \"{location_input}\"" if location_input else "📋 Available Resources"
     st.subheader(heading)
     st.markdown(f"{len(df)} resource(s) match your filters.")
 
     if df.empty:
-        if location_input:
-            msg = f'No resources found near "{location_input}".'
-            if known_cities:
-                msg += f" This directory currently covers: {', '.join(known_cities)}."
-            msg += " Try one of those, or clear the city/ZIP field to see everything."
-        else:
-            msg = "No resources match your current filters. Try adjusting them in the sidebar."
+        msg = describe_no_results(filters or {}, known_cities)
         st.warning(msg)
         return
 
@@ -350,16 +401,27 @@ def render_directory(df: pd.DataFrame, location_input: str, known_cities=None, k
                         icon="⚠️",
                     )
                 else:
-                    verified_text = "✅ **Verified**: address and phone number confirmed against the provider's official listing"
-                    if row["last_verified"]:
-                        verified_text += f" (checked {row['last_verified']})"
-                    verified_text += (
-                        ". This does **not** confirm current availability, wait "
-                        "times, or your eligibility — call ahead to check."
-                    )
-                    st.markdown(verified_text)
-                    if row["source_url"]:
-                        st.markdown(f"[Official source]({row['source_url']})")
+                    verified_date = format_verified_date(row["last_verified"])
+                    short_line = "✅ Address and phone checked"
+                    short_line += f" {verified_date}." if verified_date else "."
+                    st.markdown(short_line)
+                    st.markdown("📞 Call to confirm availability and eligibility.")
+                    with st.expander(
+                        "What does “Verified” mean?",
+                        key=f"{key_prefix}_verified_expander_{row['id']}",
+                    ):
+                        detail = (
+                            "We confirmed this resource's address and phone number "
+                            "against its official listing"
+                        )
+                        detail += f" on {verified_date}." if verified_date else "."
+                        detail += (
+                            " This does **not** confirm current availability, wait "
+                            "times, or your eligibility — please call ahead to check."
+                        )
+                        st.markdown(detail)
+                        if row["source_url"]:
+                            st.markdown(f"[Official source]({row['source_url']})")
             with col_action:
                 digits = phone_digits(row["phone"])
                 if digits:
@@ -525,7 +587,9 @@ def main():
     )
 
     with tab_find:
-        render_directory(filtered_df, location_input, known_cities, key_prefix="find")
+        render_directory(
+            filtered_df, location_input, known_cities, key_prefix="find", filters=filter_result
+        )
         st.divider()
         with st.expander("🗺️ Show map (optional)", expanded=False):
             render_map(filtered_df, location_input)
