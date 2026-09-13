@@ -38,8 +38,11 @@ youth-haven-app/
 
 - **Frontend/UI:** [Streamlit](https://streamlit.io/) renders the entire
   app as a single-page experience: a header with mission copy and the
-  Quick Exit control, a sidebar of filters, and two tabs ("Find
-  Resources" and "Analytics").
+  Quick Exit control, a sidebar of filters, and three tabs — **Find
+  Resources**, **About & Coverage Stats**, and **Demo Data (not real)**.
+  Sample/placeholder data is never mixed into the first two tabs; it only
+  ever appears in the clearly-labeled Demo Data tab, so a real search
+  can't accidentally surface a fictional listing.
 - **Map:** [Folium](https://python-visualization.github.io/folium/) renders
   an interactive dark-themed map, embedded via
   [`streamlit-folium`](https://github.com/randyzwitch/streamlit-folium),
@@ -75,6 +78,9 @@ array) follows this schema:
 | `age_range`            | string  | Eligible age range (e.g. `"16-24"`, `"All Ages"`)                    |
 | `walk_in_allowed`      | boolean | Whether people can access services without an appointment           |
 | `confidential_support` | boolean | Whether the service guarantees confidential support                 |
+| `cost`                 | string  | Plain-language cost/access note, e.g. `"Free"`, `"Insurance accepted"`, `"Fees apply"`, `"Cost unknown"` |
+| `appointment_required` | boolean | Whether you need to call ahead / book before showing up (defaults to `true` if missing — the cautious assumption) |
+| `referral_required`    | boolean | Whether a referral from another agency or professional is needed to access the service |
 | `latitude`             | float   | Approximate latitude for map placement (see note below)             |
 | `longitude`            | float   | Approximate longitude for map placement (see note below)            |
 | `is_sample`            | boolean | `true` if this is placeholder/demo data, not a verified real-world resource |
@@ -83,9 +89,20 @@ array) follows this schema:
 
 If `is_sample`, `source_url`, or `last_verified` is omitted from an entry,
 the loader treats it as **unverified** (`is_sample: true` by default) rather
-than silently displaying it as confirmed. The UI shows a "✅ Verified" badge
-with the source link and date for real entries, and a "⚠️ Sample/demo data"
-warning for placeholder entries — verified entries are always listed first.
+than silently displaying it as confirmed. Sample entries never appear in the
+**Find Resources** or **About & Coverage Stats** tabs — they only render in
+the separate **Demo Data (not real)** tab, each still carrying its own
+"⚠️ Sample/demo data" warning there.
+
+**What "✅ Verified" means, precisely.** It means the address and phone
+number were checked against the organization's own official listing
+(linked as `source_url`) as of the `last_verified` date. It does **not**
+mean current availability, wait times, or your personal eligibility were
+confirmed — the UI says this explicitly next to the badge, and you should
+still call ahead. `last_verified` is a fixed date stored in the JSON at
+data-entry time; the app never computes or displays "today" in its place,
+so the date always reflects when a human (or an AI assistant, with a web
+search) actually checked the listing — not when the page happened to load.
 
 As of this writing, the dataset includes verified resources for Frisco,
 Plano, McKinney, and Dallas, TX (each sourced from the organization's own
@@ -93,6 +110,7 @@ website), alongside placeholder Pacific Northwest entries kept for
 demonstration purposes and clearly labeled as sample data. Before relying
 on any entry, confirm details are current — organizations change hours,
 addresses, and phone numbers. Report outdated entries by opening an issue
+or updating `data/resources.json` directly.
 
 **A note on map precision.** The `latitude`/`longitude` values for the
 verified Texas entries were placed by hand from the street address (no
@@ -105,8 +123,10 @@ Maps, which geocodes it live at click time. That link is accurate
 regardless of this dataset's own coordinate precision; if you re-import
 this data elsewhere, consider running the addresses through a proper
 geocoder (e.g. Census Bureau or Nominatim) to tighten the stored
-coordinates too.
-or updating `data/resources.json` directly.
+coordinates too. Note also that `address` should hold the street address
+only (no city/state/zip) — the UI always appends `city` when displaying
+or building a Directions link, so an address that already includes the
+city would render as a duplicate (e.g. "..., Frisco, TX 75036, Frisco").
 
 The loader in `app.py` fills in sensible defaults for any missing or
 malformed field (e.g. `"Hours not listed"`, `walk_in_allowed: false`) and
@@ -196,6 +216,12 @@ shared or public devices where connection privacy matters.
   verify every entry's current hours, eligibility, and contact details
   directly with the organization, and replace or remove remaining sample
   entries.
-- Quick Exit clears Streamlit's session state and navigates away, but does
-  not clear browser history. Users in high-risk situations should be
-  informed to also clear their browser history/tabs as needed.
+- Quick Exit clears Streamlit's session state and navigates away. Its
+  on-screen label is deliberately literal — "Leaves this page. Does not
+  erase browser history." — with no suggestion that private/incognito
+  browsing is a substitute for that (it isn't: private browsing only
+  prevents history from being written in the first place; it does nothing
+  to history already recorded). Users in high-risk situations should be
+  told plainly to also clear their browser history/tabs, or start a
+  private/incognito session *before* visiting, if hiding this visit
+  matters to them.

@@ -23,7 +23,8 @@ CATEGORY_COLORS = {
 REQUIRED_FIELDS = [
     "id", "name", "category", "address", "city", "phone",
     "operating_hours", "age_range", "walk_in_allowed",
-    "confidential_support", "latitude", "longitude",
+    "confidential_support", "cost", "appointment_required",
+    "referral_required", "latitude", "longitude",
     "is_sample", "source_url", "last_verified",
 ]
 
@@ -37,6 +38,10 @@ DEFAULTS = {
     "age_range": "All Ages",
     "walk_in_allowed": False,
     "confidential_support": False,
+    "cost": "Cost unknown",
+    # Missing access info defaults to the more cautious assumption.
+    "appointment_required": True,
+    "referral_required": False,
     "latitude": None,
     "longitude": None,
     # Missing provenance is treated as unverified, not silently trusted.
@@ -80,6 +85,32 @@ def directions_url(address: str, city: str) -> str:
     return f"https://www.google.com/maps/search/?api=1&query={quote(query)}"
 
 
+def phone_digits(phone: str) -> str:
+    """Extract a tel:-safe digit string (keeping a leading +) from a phone field."""
+    return "".join(ch for ch in str(phone) if ch.isdigit() or ch == "+")
+
+
+def apply_filters(
+    df: pd.DataFrame,
+    categories=None,
+    location: str = "",
+    age=None,
+    walk_in_only: bool = False,
+) -> pd.DataFrame:
+    """Pure filtering function, kept separate from widgets so it's directly testable."""
+    filtered = df.copy()
+    if categories:
+        filtered = filtered[filtered["category"].isin(categories)]
+    if location:
+        term = location.strip().lower()
+        filtered = filtered[filtered["city"].str.lower().str.contains(term, na=False)]
+    if age is not None:
+        filtered = filtered[(filtered["age_min"] <= age) & (filtered["age_max"] >= age)]
+    if walk_in_only:
+        filtered = filtered[filtered["walk_in_allowed"]]
+    return filtered
+
+
 @st.cache_data
 def load_resources(path: Path) -> pd.DataFrame:
     """Load and sanitize the resource dataset, filling in gaps gracefully."""
@@ -110,6 +141,8 @@ def load_resources(path: Path) -> pd.DataFrame:
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
     df["walk_in_allowed"] = df["walk_in_allowed"].astype(bool)
     df["confidential_support"] = df["confidential_support"].astype(bool)
+    df["appointment_required"] = df["appointment_required"].astype(bool)
+    df["referral_required"] = df["referral_required"].astype(bool)
     df["is_sample"] = df["is_sample"].astype(bool)
     age_bounds = df["age_range"].apply(parse_age_range)
     df["age_min"] = age_bounds.apply(lambda t: t[0])
@@ -148,23 +181,23 @@ def render_header():
         st.write("")
         if st.button(
             "🚪 Quick Exit",
-            help="Clears your filters and this session, then leaves the site.",
+            help="Leaves this page. Does not erase browser history.",
             use_container_width=True,
             type="primary",
         ):
             quick_exit()
-        st.caption("Doesn't clear browser history — use private browsing for that.")
+        st.caption("Leaves this page. Does not erase browser history.")
 
     st.markdown(
         "**You are not alone.** Youth Haven helps you find shelter, food, "
         "legal aid, and crisis support near you — quickly, and without "
         "creating an account."
     )
-    st.caption(
-        "Currently includes verified, sourced resources in Frisco, Plano, "
-        "McKinney, and Dallas, TX, alongside labeled sample/demo listings "
-        "used to prototype this project. Look for the ✅ Verified or "
-        "⚠️ Sample badge on each entry."
+    st.markdown(
+        "Includes verified, sourced resources in Frisco, Plano, McKinney, "
+        "and Dallas, TX. Fictional sample/demo listings used to prototype "
+        "this project live separately in the **🧪 Demo Data** tab and are "
+        "never mixed into real search results."
     )
 
     with st.expander("🔒 What this site does and doesn't do with your data"):
@@ -194,24 +227,22 @@ def render_filters(df: pd.DataFrame) -> dict:
     st.sidebar.header("🔎 Find What You Need")
     st.sidebar.caption(
         "Your filter choices are used only to display results in this browser "
-        "tab — this app doesn't save them anywhere. (See “What this site does "
-        "with your data” above for what your network or hosting provider can "
-        "still see.)"
+        "tab — this app doesn't save them anywhere. See the “What this site "
+        "does with your data” section near the top of the page for what your "
+        "network or hosting provider can still see."
     )
 
+    known_cities = sorted(df["city"].dropna().unique().tolist()) if not df.empty else []
     categories = sorted(df["category"].dropna().unique().tolist()) if not df.empty else []
     selected_categories = st.sidebar.multiselect("Category", options=categories, default=categories)
-
-    show_sample_data = st.sidebar.checkbox(
-        "Include sample/demo entries (not verified)",
-        value=True,
-        help="Uncheck to show only resources with a confirmed official source and verification date.",
-    )
 
     location_input = st.sidebar.text_input(
         "Your city or ZIP code (optional)",
         value="",
-        help="We currently match this against each resource's city name.",
+        help=(
+            "Matched against each resource's city name. Currently covers: "
+            + (", ".join(known_cities) if known_cities else "no cities yet")
+        ),
     )
 
     age_input = st.sidebar.text_input(
@@ -234,36 +265,42 @@ def render_filters(df: pd.DataFrame) -> dict:
         "or **911** for emergencies."
     )
 
-    filtered = df.copy()
-    if not show_sample_data:
-        filtered = filtered[~filtered["is_sample"]]
-    if selected_categories:
-        filtered = filtered[filtered["category"].isin(selected_categories)]
-    if location_input.strip():
-        term = location_input.strip().lower()
-        filtered = filtered[filtered["city"].str.lower().str.contains(term, na=False)]
-    if user_age is not None:
-        filtered = filtered[(filtered["age_min"] <= user_age) & (filtered["age_max"] >= user_age)]
-    if walk_in_only:
-        filtered = filtered[filtered["walk_in_allowed"]]
+    filtered = apply_filters(
+        df,
+        categories=selected_categories,
+        location=location_input.strip(),
+        age=user_age,
+        walk_in_only=walk_in_only,
+    )
 
     return {
         "filtered": filtered,
         "location_input": location_input.strip(),
         "user_age": user_age,
+        "known_cities": known_cities,
     }
 
 
-def render_directory(df: pd.DataFrame, location_input: str):
+def render_directory(df: pd.DataFrame, location_input: str, known_cities=None, key_prefix: str = "find"):
+    known_cities = known_cities or []
     heading = f"📋 Resources Near \"{location_input}\"" if location_input else "📋 Available Resources"
     st.subheader(heading)
-    st.caption(f"{len(df)} resource(s) match your filters.")
+    st.markdown(f"{len(df)} resource(s) match your filters.")
 
     if df.empty:
-        st.warning("No resources match your current filters. Try adjusting them in the sidebar.")
+        if location_input:
+            msg = f'No resources found near "{location_input}".'
+            if known_cities:
+                msg += f" This directory currently covers: {', '.join(known_cities)}."
+            msg += " Try one of those, or clear the city/ZIP field to see everything."
+        else:
+            msg = "No resources match your current filters. Try adjusting them in the sidebar."
+        st.warning(msg)
         return
 
-    search_term = st.text_input("Search by name, city, or address", value="")
+    search_term = st.text_input(
+        "Search by name, city, or address", value="", key=f"{key_prefix}_search"
+    )
     view = df.copy()
     if search_term:
         term = search_term.lower()
@@ -275,7 +312,10 @@ def render_directory(df: pd.DataFrame, location_input: str):
         view = view[mask]
 
     if view.empty:
-        st.warning("No resources match your search.")
+        st.warning(
+            f'No resources match "{search_term}". Try a different name, city, '
+            "or address, or clear the search box above."
+        )
         return
 
     # Verified, sourced resources surface above unverified sample/demo entries.
@@ -286,15 +326,22 @@ def render_directory(df: pd.DataFrame, location_input: str):
             col_info, col_action = st.columns([4, 1])
             with col_info:
                 st.markdown(f"**{row['name']}**  \n*{row['category']}*")
-                st.caption(f"📍 {row['address']}, {row['city']}")
-                st.caption(f"🕒 {row['operating_hours']}  |  👥 Ages {row['age_range']}")
-                badges = []
+                st.markdown(f"📍 {row['address']}, {row['city']}")
+                st.markdown(f"🕒 {row['operating_hours']}  |  👥 Ages {row['age_range']}")
+                st.markdown(f"💲 {row['cost']}")
+
+                access_bits = []
                 if row["walk_in_allowed"]:
-                    badges.append("🚶 Walk-ins welcome")
+                    access_bits.append("🚶 Walk-ins welcome")
+                if row["appointment_required"]:
+                    access_bits.append("📅 Appointment/call-ahead required")
+                if row["referral_required"]:
+                    access_bits.append("📄 Referral required")
                 if row["confidential_support"]:
-                    badges.append("🔒 Confidential support")
-                if badges:
-                    st.caption(" · ".join(badges))
+                    access_bits.append("🔒 Confidential support")
+                if access_bits:
+                    st.markdown(" · ".join(access_bits))
+
                 if row["is_sample"]:
                     st.warning(
                         "⚠️ Sample/demo data for this prototype — not a "
@@ -303,31 +350,45 @@ def render_directory(df: pd.DataFrame, location_input: str):
                         icon="⚠️",
                     )
                 else:
-                    verified_line = "✅ Verified"
+                    verified_text = "✅ **Verified**: address and phone number confirmed against the provider's official listing"
                     if row["last_verified"]:
-                        verified_line += f" as of {row['last_verified']}"
+                        verified_text += f" (checked {row['last_verified']})"
+                    verified_text += (
+                        ". This does **not** confirm current availability, wait "
+                        "times, or your eligibility — call ahead to check."
+                    )
+                    st.markdown(verified_text)
                     if row["source_url"]:
-                        verified_line += f" · [Official source]({row['source_url']})"
-                    st.caption(verified_line)
+                        st.markdown(f"[Official source]({row['source_url']})")
             with col_action:
-                phone = row["phone"]
-                digits = "".join(ch for ch in str(phone) if ch.isdigit() or ch == "+")
+                digits = phone_digits(row["phone"])
                 if digits:
-                    st.link_button("📞 Call", f"tel:{digits}", use_container_width=True)
+                    st.link_button(
+                        "📞 Call",
+                        f"tel:{digits}",
+                        use_container_width=True,
+                        key=f"{key_prefix}_call_{row['id']}",
+                    )
                 else:
-                    st.button("📞 No phone", disabled=True, use_container_width=True, key=f"nophone_{row['id']}")
+                    st.button(
+                        "📞 No phone",
+                        disabled=True,
+                        use_container_width=True,
+                        key=f"{key_prefix}_nophone_{row['id']}",
+                    )
                 st.link_button(
                     "🧭 Directions",
                     directions_url(row["address"], row["city"]),
                     use_container_width=True,
                     help="Opens the exact address in Google Maps for precise navigation.",
+                    key=f"{key_prefix}_directions_{row['id']}",
                 )
 
 
 def render_map(df: pd.DataFrame, location_input: str):
     heading = f"📍 Map of Resources Near \"{location_input}\"" if location_input else "📍 Map of All Resources"
     st.subheader(heading)
-    st.caption(
+    st.markdown(
         "Pins are approximate placements based on each address, not a "
         "precision GPS geocode. Use a pin's popup, or the \"🧭 Directions\" "
         "button in the resource list, to get exact turn-by-turn navigation."
@@ -359,6 +420,7 @@ def render_map(df: pd.DataFrame, location_input: str):
             f"{row['address']}, {row['city']}<br>"
             f"Hours: {row['operating_hours']}<br>"
             f"Phone: {row['phone']}<br>"
+            f"Cost: {row['cost']}<br>"
             f"Walk-ins: {'Yes' if row['walk_in_allowed'] else 'No'}<br>"
             f"{verification_html}<br>"
             f'<a href="{maps_link}" target="_blank" rel="noopener">🧭 Get exact directions</a>'
@@ -375,10 +437,11 @@ def render_map(df: pd.DataFrame, location_input: str):
 
 def render_analytics(df: pd.DataFrame):
     st.subheader("📊 Project Coverage Stats")
-    st.caption(
+    st.markdown(
         "This tab is about the dataset, not your personal search — it summarizes "
-        "how many resources of each type are in Youth Haven's directory and where "
-        "they're located, filtered by whatever you've selected in the sidebar."
+        "how many **verified** resources of each type are in Youth Haven's "
+        "directory and where they're located, filtered by whatever you've "
+        "selected in the sidebar. Sample/demo data is excluded from these stats."
     )
 
     if df.empty:
@@ -449,20 +512,43 @@ def main():
         )
         return
 
-    filter_result = render_filters(resources_df)
+    real_df = resources_df[~resources_df["is_sample"]].copy()
+    sample_df = resources_df[resources_df["is_sample"]].copy()
+
+    filter_result = render_filters(real_df)
     filtered_df = filter_result["filtered"]
     location_input = filter_result["location_input"]
+    known_cities = filter_result["known_cities"]
 
-    tab_find, tab_about = st.tabs(["🧭 Find Resources", "📊 About & Coverage Stats"])
+    tab_find, tab_about, tab_demo = st.tabs(
+        ["🧭 Find Resources", "📊 About & Coverage Stats", "🧪 Demo Data (not real)"]
+    )
 
     with tab_find:
-        render_directory(filtered_df, location_input)
+        render_directory(filtered_df, location_input, known_cities, key_prefix="find")
         st.divider()
         with st.expander("🗺️ Show map (optional)", expanded=False):
             render_map(filtered_df, location_input)
 
     with tab_about:
         render_analytics(filtered_df)
+
+    with tab_demo:
+        st.warning(
+            "⚠️ **Everything in this tab is fictional placeholder data** used "
+            "to prototype this app's layout and features while real resources "
+            "were being sourced. None of these are real organizations — do "
+            "not contact them for help. For real help, use the **Find "
+            "Resources** tab, or call **211** (general assistance) or **988** "
+            "(crisis support).",
+            icon="⚠️",
+        )
+        render_directory(
+            sample_df,
+            "",
+            sorted(sample_df["city"].dropna().unique().tolist()),
+            key_prefix="demo",
+        )
 
     st.divider()
     st.caption(
