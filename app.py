@@ -3,6 +3,7 @@
 import json
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 import folium
 import pandas as pd
@@ -66,6 +67,17 @@ def parse_age_range(age_range: str) -> tuple:
     if len(numbers) == 1:
         return (int(numbers[0]), 120)
     return (0, 120)
+
+
+def directions_url(address: str, city: str) -> str:
+    """Build a Google Maps search URL from the address text.
+
+    This resolves the exact location at click-time from the verified
+    address string, so navigation accuracy doesn't depend on this
+    dataset's own (approximate) latitude/longitude fields.
+    """
+    query = f"{address}, {city}" if city and city not in address else address
+    return f"https://www.google.com/maps/search/?api=1&query={quote(query)}"
 
 
 @st.cache_data
@@ -304,11 +316,22 @@ def render_directory(df: pd.DataFrame, location_input: str):
                     st.link_button("📞 Call", f"tel:{digits}", use_container_width=True)
                 else:
                     st.button("📞 No phone", disabled=True, use_container_width=True, key=f"nophone_{row['id']}")
+                st.link_button(
+                    "🧭 Directions",
+                    directions_url(row["address"], row["city"]),
+                    use_container_width=True,
+                    help="Opens the exact address in Google Maps for precise navigation.",
+                )
 
 
 def render_map(df: pd.DataFrame, location_input: str):
     heading = f"📍 Map of Resources Near \"{location_input}\"" if location_input else "📍 Map of All Resources"
     st.subheader(heading)
+    st.caption(
+        "Pins are approximate placements based on each address, not a "
+        "precision GPS geocode. Use a pin's popup, or the \"🧭 Directions\" "
+        "button in the resource list, to get exact turn-by-turn navigation."
+    )
 
     mappable = df.dropna(subset=["latitude", "longitude"])
     if mappable.empty:
@@ -329,6 +352,7 @@ def render_map(df: pd.DataFrame, location_input: str):
             verification_html = "⚠️ Sample/demo data — not verified"
         else:
             verification_html = f"✅ Verified as of {row['last_verified']}" if row["last_verified"] else "✅ Verified"
+        maps_link = directions_url(row["address"], row["city"])
         popup_html = (
             f"<b>{row['name']}</b><br>"
             f"{row['category']}<br>"
@@ -336,7 +360,8 @@ def render_map(df: pd.DataFrame, location_input: str):
             f"Hours: {row['operating_hours']}<br>"
             f"Phone: {row['phone']}<br>"
             f"Walk-ins: {'Yes' if row['walk_in_allowed'] else 'No'}<br>"
-            f"{verification_html}"
+            f"{verification_html}<br>"
+            f'<a href="{maps_link}" target="_blank" rel="noopener">🧭 Get exact directions</a>'
         )
         folium.Marker(
             location=[row["latitude"], row["longitude"]],
