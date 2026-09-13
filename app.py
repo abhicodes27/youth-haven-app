@@ -22,11 +22,11 @@ CATEGORY_COLORS = {
 }
 
 REQUIRED_FIELDS = [
-    "id", "name", "category", "address", "city", "phone",
+    "id", "name", "category", "address", "city", "zip_code", "phone",
     "operating_hours", "age_range", "walk_in_allowed",
     "confidential_support", "cost", "appointment_required",
     "referral_required", "latitude", "longitude",
-    "is_sample", "source_url", "last_verified",
+    "is_sample", "source_url", "last_verified", "is_verified",
 ]
 
 DEFAULTS = {
@@ -34,6 +34,7 @@ DEFAULTS = {
     "category": "Uncategorized",
     "address": "Address not available",
     "city": "Unknown",
+    "zip_code": "",
     "phone": "Not listed",
     "operating_hours": "Hours not listed",
     "age_range": "All Ages",
@@ -114,7 +115,9 @@ def apply_filters(
         filtered = filtered[filtered["category"].isin(categories)]
     if location:
         term = location.strip().lower()
-        filtered = filtered[filtered["city"].str.lower().str.contains(term, na=False)]
+        city_match = filtered["city"].str.lower().str.contains(term, na=False, regex=False)
+        zip_match = filtered["zip_code"].astype(str).str.contains(term, na=False, regex=False)
+        filtered = filtered[city_match | zip_match]
     if age is not None:
         filtered = filtered[(filtered["age_min"] <= age) & (filtered["age_max"] >= age)]
     if walk_in_only:
@@ -158,6 +161,13 @@ def load_resources(path: Path) -> pd.DataFrame:
     age_bounds = df["age_range"].apply(parse_age_range)
     df["age_min"] = age_bounds.apply(lambda t: t[0])
     df["age_max"] = age_bounds.apply(lambda t: t[1])
+    # A real (non-sample) row only counts as "Verified" if it actually
+    # carries evidence — a source link and a verification date. A record
+    # with is_sample: false but no source/date is neither sample data nor
+    # properly verified, and must not silently pass as confirmed.
+    has_source = df["source_url"].astype(str).str.strip() != ""
+    has_date = df["last_verified"].astype(str).str.strip() != ""
+    df["is_verified"] = (~df["is_sample"]) & has_source & has_date
     return df
 
 
@@ -208,15 +218,21 @@ def render_header():
     with st.expander("🔒 What this site does and doesn't do with your data"):
         st.markdown(
             """
-            - This app does **not** ask for your name, create an account, or
-              save your searches. Your filter choices live only in this
-              browser tab and are cleared when you close it or click
+            - This app does **not** ask for your name or create an account.
+            - Your filter inputs (age, city/ZIP, category, search terms) are
+              sent to and processed on the server — like any web app, that's
+              how the results get computed — but this app does **not**
+              intentionally write them to a database, log file, or analytics
+              service. They exist only for the moment it takes to build your
+              results, and are discarded when your session ends or you click
               **Quick Exit**.
             - This app does **not** use tracking cookies or analytics scripts.
             - That said, no website can promise total invisibility: the
               hosting provider and your network (Wi-Fi, ISP, or workplace)
               can typically see that you visited this page, the same as any
-              site you load. The interactive map also loads map tiles from
+              site you load, and standard server infrastructure logs (request
+              timestamps, IP addresses) are generally outside this app's
+              control. The interactive map also loads map tiles from
               OpenStreetMap, an external service, which may log that
               request like any embedded image.
             - **Quick Exit** clears this app's session and sends you to
@@ -231,13 +247,15 @@ def render_header():
 def render_filters(df: pd.DataFrame) -> dict:
     st.sidebar.header("🔎 Find What You Need")
     st.sidebar.caption(
-        "Your filter choices are used only to display results in this browser "
-        "tab — this app doesn't save them anywhere. See the “What this site "
-        "does with your data” section near the top of the page for what your "
+        "Your filter inputs are processed temporarily on the server to build "
+        "your results — this app does not intentionally save or log them "
+        "anywhere. See the “What this site does with your data” section near "
+        "the top of the page for the full picture, including what your "
         "network or hosting provider can still see."
     )
 
     known_cities = sorted(df["city"].dropna().unique().tolist()) if not df.empty else []
+    known_zips = sorted(z for z in df["zip_code"].dropna().unique().tolist() if z) if not df.empty else []
     categories = sorted(df["category"].dropna().unique().tolist()) if not df.empty else []
     selected_categories = st.sidebar.multiselect("Category", options=categories, default=categories)
 
@@ -245,8 +263,11 @@ def render_filters(df: pd.DataFrame) -> dict:
         "Your city or ZIP code (optional)",
         value="",
         help=(
-            "Matched against each resource's city name. Currently covers: "
-            + (", ".join(known_cities) if known_cities else "no cities yet")
+            "Matched against each resource's city name and ZIP code. "
+            "Cities covered: " + (", ".join(known_cities) if known_cities else "none yet")
+            + ". ZIP codes covered: " + (", ".join(known_zips) if known_zips else "none yet")
+            + ". A ZIP near one of these but not listed won't match — it "
+            "isn't a radius search."
         ),
     )
 
@@ -283,16 +304,18 @@ def render_filters(df: pd.DataFrame) -> dict:
         "location_input": location_input.strip(),
         "user_age": user_age,
         "known_cities": known_cities,
+        "known_zips": known_zips,
         "selected_categories": selected_categories,
         "all_categories": categories,
         "walk_in_only": walk_in_only,
     }
 
 
-def describe_no_results(filters: dict, known_cities=None) -> str:
+def describe_no_results(filters: dict, known_cities=None, known_zips=None) -> str:
     """Build a specific, actionable empty-state message naming which active
     filters are narrowing the results and how to broaden each one."""
     known_cities = known_cities or []
+    known_zips = known_zips or []
     location = filters.get("location_input") or ""
     age = filters.get("user_age")
     selected = filters.get("selected_categories") or []
@@ -316,10 +339,13 @@ def describe_no_results(filters: dict, known_cities=None) -> str:
     msg = f"No resources match {', '.join(active)}. "
     suggestions = []
     if location:
+        covers = []
         if known_cities:
-            suggestions.append(
-                f"try a nearby city ({', '.join(known_cities)}) or clear the city/ZIP field"
-            )
+            covers.append(f"cities: {', '.join(known_cities)}")
+        if known_zips:
+            covers.append(f"ZIP codes: {', '.join(known_zips)}")
+        if covers:
+            suggestions.append(f"try one of the covered {' / '.join(covers)}, or clear the city/ZIP field")
         else:
             suggestions.append("clear the city/ZIP field")
     if age is not None:
@@ -332,44 +358,57 @@ def describe_no_results(filters: dict, known_cities=None) -> str:
     return msg
 
 
+def apply_text_search(df: pd.DataFrame, search_term: str) -> pd.DataFrame:
+    """Pure name/city/address text search, kept separate so it can be reused
+    identically for the card list, the displayed count, and the map."""
+    if not search_term:
+        return df
+    term = search_term.lower()
+    mask = (
+        df["name"].str.lower().str.contains(term, na=False, regex=False)
+        | df["city"].str.lower().str.contains(term, na=False, regex=False)
+        | df["address"].str.lower().str.contains(term, na=False, regex=False)
+    )
+    return df[mask]
+
+
 def render_directory(
     df: pd.DataFrame,
     location_input: str,
     known_cities=None,
+    known_zips=None,
     key_prefix: str = "find",
     filters: dict = None,
-):
+) -> pd.DataFrame:
+    """Renders the directory and returns the final filtered DataFrame (after
+    the in-page text search) so callers can pass the identical data to the
+    map — the card list, the displayed count, and the map must never
+    disagree about which resources matched."""
     known_cities = known_cities or []
+    known_zips = known_zips or []
     heading = f"📋 Resources Near \"{location_input}\"" if location_input else "📋 Available Resources"
     st.subheader(heading)
-    st.markdown(f"{len(df)} resource(s) match your filters.")
 
     if df.empty:
-        msg = describe_no_results(filters or {}, known_cities)
+        msg = describe_no_results(filters or {}, known_cities, known_zips)
         st.warning(msg)
-        return
+        return df
 
     search_term = st.text_input(
         "Search by name, city, or address", value="", key=f"{key_prefix}_search"
     )
-    view = df.copy()
-    if search_term:
-        term = search_term.lower()
-        mask = (
-            view["name"].str.lower().str.contains(term, na=False)
-            | view["city"].str.lower().str.contains(term, na=False)
-            | view["address"].str.lower().str.contains(term, na=False)
-        )
-        view = view[mask]
+    view = apply_text_search(df, search_term)
+
+    st.markdown(f"{len(view)} resource(s) match your filters.")
 
     if view.empty:
         st.warning(
             f'No resources match "{search_term}". Try a different name, city, '
             "or address, or clear the search box above."
         )
-        return
+        return view
 
-    # Verified, sourced resources surface above unverified sample/demo entries.
+    # Verified, sourced resources surface above unverified/sample entries.
     view = view.sort_values(by=["is_sample", "name"], ascending=[True, True])
 
     for _, row in view.iterrows():
@@ -400,7 +439,7 @@ def render_directory(
                         "entry for actual help; call 211 or 988 instead.",
                         icon="⚠️",
                     )
-                else:
+                elif row["is_verified"]:
                     verified_date = format_verified_date(row["last_verified"])
                     short_line = "✅ Address and phone checked"
                     short_line += f" {verified_date}." if verified_date else "."
@@ -422,14 +461,44 @@ def render_directory(
                         st.markdown(detail)
                         if row["source_url"]:
                             st.markdown(f"[Official source]({row['source_url']})")
+                else:
+                    st.warning(
+                        "⚠️ Not verified: this entry is missing an official "
+                        "source link and/or a verification date, so it is "
+                        "**not** shown as confirmed. Do not rely on it "
+                        "without independently checking the organization.",
+                        icon="⚠️",
+                    )
             with col_action:
                 digits = phone_digits(row["phone"])
-                if digits:
+                if row["is_sample"]:
+                    st.button(
+                        "📞 Call (disabled — demo data)",
+                        disabled=True,
+                        use_container_width=True,
+                        key=f"{key_prefix}_call_{row['id']}",
+                        help="This is fictional sample data; calling it would not reach a real service.",
+                    )
+                    st.button(
+                        "🧭 Directions (disabled — demo data)",
+                        disabled=True,
+                        use_container_width=True,
+                        key=f"{key_prefix}_directions_{row['id']}",
+                        help="This is fictional sample data; there is nowhere real to navigate to.",
+                    )
+                elif digits:
                     st.link_button(
                         "📞 Call",
                         f"tel:{digits}",
                         use_container_width=True,
                         key=f"{key_prefix}_call_{row['id']}",
+                    )
+                    st.link_button(
+                        "🧭 Directions",
+                        directions_url(row["address"], row["city"]),
+                        use_container_width=True,
+                        help="Opens the exact address in Google Maps for precise navigation.",
+                        key=f"{key_prefix}_directions_{row['id']}",
                     )
                 else:
                     st.button(
@@ -438,13 +507,14 @@ def render_directory(
                         use_container_width=True,
                         key=f"{key_prefix}_nophone_{row['id']}",
                     )
-                st.link_button(
-                    "🧭 Directions",
-                    directions_url(row["address"], row["city"]),
-                    use_container_width=True,
-                    help="Opens the exact address in Google Maps for precise navigation.",
-                    key=f"{key_prefix}_directions_{row['id']}",
-                )
+                    st.link_button(
+                        "🧭 Directions",
+                        directions_url(row["address"], row["city"]),
+                        use_container_width=True,
+                        help="Opens the exact address in Google Maps for precise navigation.",
+                        key=f"{key_prefix}_directions_{row['id']}",
+                    )
+    return view
 
 
 def render_map(df: pd.DataFrame, location_input: str):
@@ -473,8 +543,10 @@ def render_map(df: pd.DataFrame, location_input: str):
         color = CATEGORY_COLORS.get(row["category"], "gray")
         if row["is_sample"]:
             verification_html = "⚠️ Sample/demo data — not verified"
+        elif row["is_verified"]:
+            verification_html = f"✅ Verified as of {row['last_verified']}"
         else:
-            verification_html = f"✅ Verified as of {row['last_verified']}" if row["last_verified"] else "✅ Verified"
+            verification_html = "⚠️ Not verified — missing source/date"
         maps_link = directions_url(row["address"], row["city"])
         popup_html = (
             f"<b>{row['name']}</b><br>"
@@ -581,18 +653,27 @@ def main():
     filtered_df = filter_result["filtered"]
     location_input = filter_result["location_input"]
     known_cities = filter_result["known_cities"]
+    known_zips = filter_result["known_zips"]
 
     tab_find, tab_about, tab_demo = st.tabs(
         ["🧭 Find Resources", "📊 About & Coverage Stats", "🧪 Demo Data (not real)"]
     )
 
     with tab_find:
-        render_directory(
-            filtered_df, location_input, known_cities, key_prefix="find", filters=filter_result
+        # render_directory returns the FINAL filtered set (sidebar filters +
+        # the in-page text search), which the map below reuses — so the
+        # count, the cards, and the map pins can never disagree.
+        final_find_df = render_directory(
+            filtered_df,
+            location_input,
+            known_cities,
+            known_zips,
+            key_prefix="find",
+            filters=filter_result,
         )
         st.divider()
         with st.expander("🗺️ Show map (optional)", expanded=False):
-            render_map(filtered_df, location_input)
+            render_map(final_find_df, location_input)
 
     with tab_about:
         render_analytics(filtered_df)

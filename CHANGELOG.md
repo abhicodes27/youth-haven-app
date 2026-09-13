@@ -5,6 +5,64 @@ scatter that history across commit messages, this file keeps a record of
 what was flagged, what changed in response, and what was verified — so a
 future contributor (or reviewer) can see the reasoning, not just the diff.
 
+## Round 6 — Six concrete correctness bugs
+
+**Feedback:** ZIP search silently does nothing (only `city` was matched);
+typing `[` anywhere in a search box raised a regex error; the privacy
+claim that filters "live only in the browser tab" is wrong — they run
+in Python on the server; a record with `is_sample: false` but no
+`source_url`/`last_verified` still displayed as "Verified"; demo
+listings had live, clickable Call/Directions buttons identical to real
+resources; and the free-text search box filtered the cards *after* the
+result count was already printed, and the map wasn't re-filtered by it
+at all — so count, cards, and map pins could disagree.
+
+**Changes**
+
+- Added a real `zip_code` field (the exact ZIP for each of the 8
+  verified Texas entries, sourced alongside their addresses) and made
+  the location filter match city **or** ZIP. It's an exact/substring
+  match on the stored ZIP, not a radius search — the sidebar help text
+  and the no-results message both say so explicitly, listing which
+  ZIPs are actually covered.
+- Added `regex=False` to every `.str.contains()` call (`apply_filters`'
+  city/ZIP match and the new `apply_text_search()`), so regex-special
+  characters (`[`, `(`, `*`, …) are treated as literal text instead of
+  crashing.
+- Reworded the privacy sections (header expander, sidebar caption,
+  README) to say filter inputs are processed temporarily on the server
+  to build results, and that the app does not *intentionally* persist
+  them — replacing the inaccurate "exist only in the browser tab."
+- Added an `is_verified` column, computed in `load_resources()` as
+  `is_sample is False AND source_url AND last_verified` — not just
+  `is_sample is False`. A record that's real-looking but missing
+  evidence now shows a distinct "⚠️ Not verified: missing source/date"
+  warning instead of silently passing as confirmed.
+- Demo Data cards now render disabled "Call (disabled — demo data)"
+  and "Directions (disabled — demo data)" buttons instead of live
+  `tel:`/Google-Maps links.
+- Refactored the in-page search into a standalone `apply_text_search()`
+  and had `render_directory()` return the post-search DataFrame; `main()`
+  now feeds that exact object into `render_map()`, and the displayed
+  count is computed after the search, not before it — so the count,
+  the cards, and the map can no longer disagree.
+
+**Testing performed:** re-ran every prior round's automated suite (no
+regressions) plus new checks for this round — ZIP '75033' and '75208'
+resolving to the right orgs in the actual sidebar widget, an unlisted
+ZIP correctly matching nothing, `[` in both search boxes provoking no
+traceback, a synthetic "real but unevidenced" record correctly getting
+`is_verified: False`, no visible live Call/Directions links anywhere in
+the Demo Data tab (scoped to *visible* elements, since Streamlit keeps
+inactive tabs in the DOM), and the search-then-count-then-map ordering
+confirmed both by a live count check ("Promise" → exactly 1) and by
+inspecting that `main()` passes `render_directory()`'s return value
+into `render_map()`. One caveat: this sandbox's network policy blocks
+`cdn.jsdelivr.net`, which the Folium map component loads Leaflet from,
+so actual pin rendering couldn't be visually confirmed here — the fix
+is verified structurally (same DataFrame object flows to both), not by
+counting rendered pins.
+
 ## Round 5 — Wording, layout, and a full functional test pass
 
 **Feedback**

@@ -73,6 +73,7 @@ array) follows this schema:
 | `category`             | string  | One of: `Emergency Housing`, `Food Security`, `Legal Support`, `Crisis Counseling` |
 | `address`              | string  | Street address                                                      |
 | `city`                 | string  | City name                                                            |
+| `zip_code`             | string  | The specific ZIP code for this address (matched exactly/as a substring — not a radius search, so a nearby-but-different ZIP won't match) |
 | `phone`                | string  | Contact phone number                                                 |
 | `operating_hours`      | string  | Human-readable hours (e.g. `"24/7"`, `"Mon-Fri 9:00 AM - 5:00 PM"`)  |
 | `age_range`            | string  | Eligible age range (e.g. `"16-24"`, `"All Ages"`)                    |
@@ -92,17 +93,25 @@ the loader treats it as **unverified** (`is_sample: true` by default) rather
 than silently displaying it as confirmed. Sample entries never appear in the
 **Find Resources** or **About & Coverage Stats** tabs — they only render in
 the separate **Demo Data (not real)** tab, each still carrying its own
-"⚠️ Sample/demo data" warning there.
+"⚠️ Sample/demo data" warning there, with its Call/Directions buttons
+disabled (they're fictional; there's nothing real to call or navigate to).
 
-**What "✅ Verified" means, precisely.** It means the address and phone
-number were checked against the organization's own official listing
-(linked as `source_url`) as of the `last_verified` date. It does **not**
-mean current availability, wait times, or your personal eligibility were
-confirmed — the UI says this explicitly next to the badge, and you should
-still call ahead. `last_verified` is a fixed date stored in the JSON at
-data-entry time; the app never computes or displays "today" in its place,
-so the date always reflects when a human (or an AI assistant, with a web
-search) actually checked the listing — not when the page happened to load.
+**What "✅ Verified" means, precisely — and what stops it from being faked.**
+It means the address and phone number were checked against the
+organization's own official listing (linked as `source_url`) as of the
+`last_verified` date. It does **not** mean current availability, wait
+times, or your personal eligibility were confirmed — the UI says this
+explicitly next to the badge, and you should still call ahead.
+`last_verified` is a fixed date stored in the JSON at data-entry time; the
+app never computes or displays "today" in its place, so the date always
+reflects when a human (or an AI assistant, with a web search) actually
+checked the listing — not when the page happened to load. Critically, the
+"Verified" badge is **not** just `is_sample: false` — the loader computes a
+separate `is_verified` flag (`is_sample` is `false` **and** both
+`source_url` and `last_verified` are non-empty) before showing it. An
+entry with `is_sample: false` but no source link or date is neither
+sample data nor properly verified; it shows a distinct "⚠️ Not verified"
+warning instead of silently passing as confirmed.
 
 As of this writing, the dataset includes verified resources for Frisco,
 Plano, McKinney, and Dallas, TX (each sourced from the organization's own
@@ -198,10 +207,13 @@ shared or public devices where connection privacy matters.
 
 ## Privacy Notes
 
-- The application itself does not ask for a name, create accounts, use
-  tracking cookies, or persist filter selections beyond the current
-  session — this is enforced in code (`app.py` has no database, file
-  write, or analytics call in the request path).
+- The application itself does not ask for a name, create accounts, or
+  use tracking cookies. Filter inputs (age, city/ZIP, category, search
+  terms) **are** sent to and processed on the server — that's how
+  Streamlit computes your results, the same as any server-rendered web
+  app — but this app does not intentionally write them to a database,
+  file, or analytics service (`app.py` has no such call in the request
+  path). They exist only for the moment it takes to build your results.
 - That said, this app cannot promise total anonymity, and the UI says so:
   Streamlit Community Cloud (or whatever host runs it) and the visitor's
   own network/ISP can see that the page was requested, the same as any
