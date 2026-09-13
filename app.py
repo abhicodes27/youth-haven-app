@@ -166,7 +166,12 @@ def render_map(df: pd.DataFrame):
 
     center_lat = mappable["latitude"].mean()
     center_lon = mappable["longitude"].mean()
-    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=10, tiles="CartoDB dark_matter")
+    fmap = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=10,
+        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    )
 
     for _, row in mappable.iterrows():
         color = CATEGORY_COLORS.get(row["category"], "gray")
