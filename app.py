@@ -169,8 +169,7 @@ def render_map(df: pd.DataFrame):
     fmap = folium.Map(
         location=[center_lat, center_lon],
         zoom_start=10,
-        tiles="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        tiles="OpenStreetMap",
     )
 
     for _, row in mappable.iterrows():
