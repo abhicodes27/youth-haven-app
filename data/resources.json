@@ -12,7 +12,10 @@
       "walk_in_allowed": true,
       "confidential_support": true,
       "latitude": 45.5231,
-      "longitude": -122.6765
+      "longitude": -122.6765,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 2,
@@ -26,7 +29,10 @@
       "walk_in_allowed": true,
       "confidential_support": true,
       "latitude": 47.6062,
-      "longitude": -122.3321
+      "longitude": -122.3321,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 3,
@@ -40,7 +46,10 @@
       "walk_in_allowed": false,
       "confidential_support": true,
       "latitude": 45.5051,
-      "longitude": -122.6750
+      "longitude": -122.6750,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 4,
@@ -54,7 +63,10 @@
       "walk_in_allowed": true,
       "confidential_support": false,
       "latitude": 45.5122,
-      "longitude": -122.6587
+      "longitude": -122.6587,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 5,
@@ -68,7 +80,10 @@
       "walk_in_allowed": true,
       "confidential_support": false,
       "latitude": 47.6152,
-      "longitude": -122.3493
+      "longitude": -122.3493,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 6,
@@ -82,7 +97,10 @@
       "walk_in_allowed": true,
       "confidential_support": false,
       "latitude": 47.2529,
-      "longitude": -122.4443
+      "longitude": -122.4443,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 7,
@@ -96,7 +114,10 @@
       "walk_in_allowed": false,
       "confidential_support": true,
       "latitude": 45.5189,
-      "longitude": -122.6810
+      "longitude": -122.6810,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 8,
@@ -110,7 +131,10 @@
       "walk_in_allowed": true,
       "confidential_support": true,
       "latitude": 47.6041,
-      "longitude": -122.3301
+      "longitude": -122.3301,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 9,
@@ -124,7 +148,10 @@
       "walk_in_allowed": true,
       "confidential_support": true,
       "latitude": 45.5289,
-      "longitude": -122.6675
+      "longitude": -122.6675,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 10,
@@ -138,7 +165,10 @@
       "walk_in_allowed": false,
       "confidential_support": true,
       "latitude": 47.6205,
-      "longitude": -122.3493
+      "longitude": -122.3493,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 11,
@@ -152,7 +182,10 @@
       "walk_in_allowed": true,
       "confidential_support": true,
       "latitude": 47.2565,
-      "longitude": -122.4590
+      "longitude": -122.4590,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
     },
     {
       "id": 12,
@@ -166,7 +199,146 @@
       "walk_in_allowed": true,
       "confidential_support": true,
       "latitude": 47.2482,
-      "longitude": -122.4371
+      "longitude": -122.4371,
+      "is_sample": true,
+      "source_url": "",
+      "last_verified": ""
+    },
+    {
+      "id": 13,
+      "name": "Promise House",
+      "category": "Emergency Housing",
+      "address": "224 W. Page Ave",
+      "city": "Dallas",
+      "phone": "214-941-8578",
+      "operating_hours": "24/7",
+      "age_range": "16-24",
+      "walk_in_allowed": true,
+      "confidential_support": true,
+      "latitude": 32.7615,
+      "longitude": -96.8285,
+      "is_sample": false,
+      "source_url": "https://promisehouse.org/get-help/",
+      "last_verified": "2026-09-13"
+    },
+    {
+      "id": 14,
+      "name": "Legal Aid of NorthWest Texas — Dallas",
+      "category": "Legal Support",
+      "address": "1515 Main St, Dallas, TX 75201",
+      "city": "Dallas",
+      "phone": "888-529-5277",
+      "operating_hours": "Mon-Fri 9:00 AM - 4:00 PM (call intake line first)",
+      "age_range": "All Ages",
+      "walk_in_allowed": false,
+      "confidential_support": true,
+      "latitude": 32.7809,
+      "longitude": -96.7975,
+      "is_sample": false,
+      "source_url": "https://legalaidtx.org/locations/dallas/",
+      "last_verified": "2026-09-13"
+    },
+    {
+      "id": 15,
+      "name": "Minnie's Food Pantry",
+      "category": "Food Security",
+      "address": "661 18th St, Plano, TX 75074",
+      "city": "Plano",
+      "phone": "972-596-0253",
+      "operating_hours": "Wed-Sat 8:30 AM - 11:30 AM",
+      "age_range": "All Ages",
+      "walk_in_allowed": true,
+      "confidential_support": false,
+      "latitude": 33.0130,
+      "longitude": -96.6989,
+      "is_sample": false,
+      "source_url": "https://minniesfoodpantry.org/",
+      "last_verified": "2026-09-13"
+    },
+    {
+      "id": 16,
+      "name": "LifePath Systems — Plano Outpatient & Mobile Crisis",
+      "category": "Crisis Counseling",
+      "address": "7308 Alma Dr, Plano, TX 75025",
+      "city": "Plano",
+      "phone": "877-422-5939",
+      "operating_hours": "Mobile Crisis Line 24/7; Clinic Mon-Fri business hours",
+      "age_range": "All Ages",
+      "walk_in_allowed": false,
+      "confidential_support": true,
+      "latitude": 33.0709,
+      "longitude": -96.7061,
+      "is_sample": false,
+      "source_url": "https://www.lifepathsystems.org/connect-with-us/contact-us/",
+      "last_verified": "2026-09-13"
+    },
+    {
+      "id": 17,
+      "name": "The Samaritan Inn",
+      "category": "Emergency Housing",
+      "address": "1514 N. McDonald St, McKinney, TX 75071",
+      "city": "McKinney",
+      "phone": "972-542-5302",
+      "operating_hours": "Intake Tue, Thu, Sun 8:00 AM - 1:00 PM",
+      "age_range": "All Ages",
+      "walk_in_allowed": true,
+      "confidential_support": true,
+      "latitude": 33.2065,
+      "longitude": -96.6153,
+      "is_sample": false,
+      "source_url": "https://saminn.org/",
+      "last_verified": "2026-09-13"
+    },
+    {
+      "id": 18,
+      "name": "Legal Aid of NorthWest Texas — McKinney",
+      "category": "Legal Support",
+      "address": "901 N. McDonald St, Suite 702, McKinney, TX 75069",
+      "city": "McKinney",
+      "phone": "972-542-9405",
+      "operating_hours": "Mon-Fri 9:00 AM - 5:00 PM (call intake line first)",
+      "age_range": "All Ages",
+      "walk_in_allowed": false,
+      "confidential_support": true,
+      "latitude": 33.2038,
+      "longitude": -96.6153,
+      "is_sample": false,
+      "source_url": "https://legalaidtx.org/locations/mckinney/",
+      "last_verified": "2026-09-13"
+    },
+    {
+      "id": 19,
+      "name": "Frisco Family Services",
+      "category": "Food Security",
+      "address": "9085 Dogwood St, Frisco, TX 75033",
+      "city": "Frisco",
+      "phone": "972-335-9495",
+      "operating_hours": "Mon, Tue, Thu, Fri 9:00 AM - 5:00 PM; Wed 9:00 AM - 6:00 PM",
+      "age_range": "All Ages",
+      "walk_in_allowed": true,
+      "confidential_support": false,
+      "latitude": 33.1462,
+      "longitude": -96.8580,
+      "is_sample": false,
+      "source_url": "https://friscofamilyservices.org/",
+      "last_verified": "2026-09-13"
+    },
+    {
+      "id": 20,
+      "name": "BasePoint Academy — Frisco Crisis Stabilization",
+      "category": "Crisis Counseling",
+      "address": "8275 Judges Way, Suite 100i, Frisco, TX 75036",
+      "city": "Frisco",
+      "phone": "972-357-1749",
+      "operating_hours": "Call ahead for assessment; admissions vary",
+      "age_range": "12-17",
+      "walk_in_allowed": false,
+      "confidential_support": true,
+      "latitude": 33.1120,
+      "longitude": -96.7930,
+      "is_sample": false,
+      "source_url": "https://basepointacademy.com/locations/dallas/frisco/",
+      "last_verified": "2026-09-13"
     }
   ]
 }

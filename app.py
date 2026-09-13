@@ -23,6 +23,7 @@ REQUIRED_FIELDS = [
     "id", "name", "category", "address", "city", "phone",
     "operating_hours", "age_range", "walk_in_allowed",
     "confidential_support", "latitude", "longitude",
+    "is_sample", "source_url", "last_verified",
 ]
 
 DEFAULTS = {
@@ -37,6 +38,10 @@ DEFAULTS = {
     "confidential_support": False,
     "latitude": None,
     "longitude": None,
+    # Missing provenance is treated as unverified, not silently trusted.
+    "is_sample": True,
+    "source_url": "",
+    "last_verified": "",
 }
 
 
@@ -93,6 +98,7 @@ def load_resources(path: Path) -> pd.DataFrame:
     df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
     df["walk_in_allowed"] = df["walk_in_allowed"].astype(bool)
     df["confidential_support"] = df["confidential_support"].astype(bool)
+    df["is_sample"] = df["is_sample"].astype(bool)
     age_bounds = df["age_range"].apply(parse_age_range)
     df["age_min"] = age_bounds.apply(lambda t: t[0])
     df["age_max"] = age_bounds.apply(lambda t: t[1])
@@ -142,6 +148,12 @@ def render_header():
         "legal aid, and crisis support near you — quickly, and without "
         "creating an account."
     )
+    st.caption(
+        "Currently includes verified, sourced resources in Frisco, Plano, "
+        "McKinney, and Dallas, TX, alongside labeled sample/demo listings "
+        "used to prototype this project. Look for the ✅ Verified or "
+        "⚠️ Sample badge on each entry."
+    )
 
     with st.expander("🔒 What this site does and doesn't do with your data"):
         st.markdown(
@@ -168,10 +180,21 @@ def render_header():
 
 def render_filters(df: pd.DataFrame) -> dict:
     st.sidebar.header("🔎 Find What You Need")
-    st.sidebar.caption("Filters help narrow results. Nothing you select is stored or sent anywhere.")
+    st.sidebar.caption(
+        "Your filter choices are used only to display results in this browser "
+        "tab — this app doesn't save them anywhere. (See “What this site does "
+        "with your data” above for what your network or hosting provider can "
+        "still see.)"
+    )
 
     categories = sorted(df["category"].dropna().unique().tolist()) if not df.empty else []
     selected_categories = st.sidebar.multiselect("Category", options=categories, default=categories)
+
+    show_sample_data = st.sidebar.checkbox(
+        "Include sample/demo entries (not verified)",
+        value=True,
+        help="Uncheck to show only resources with a confirmed official source and verification date.",
+    )
 
     location_input = st.sidebar.text_input(
         "Your city or ZIP code (optional)",
@@ -200,6 +223,8 @@ def render_filters(df: pd.DataFrame) -> dict:
     )
 
     filtered = df.copy()
+    if not show_sample_data:
+        filtered = filtered[~filtered["is_sample"]]
     if selected_categories:
         filtered = filtered[filtered["category"].isin(selected_categories)]
     if location_input.strip():
@@ -241,6 +266,9 @@ def render_directory(df: pd.DataFrame, location_input: str):
         st.warning("No resources match your search.")
         return
 
+    # Verified, sourced resources surface above unverified sample/demo entries.
+    view = view.sort_values(by=["is_sample", "name"], ascending=[True, True])
+
     for _, row in view.iterrows():
         with st.container(border=True):
             col_info, col_action = st.columns([4, 1])
@@ -255,6 +283,20 @@ def render_directory(df: pd.DataFrame, location_input: str):
                     badges.append("🔒 Confidential support")
                 if badges:
                     st.caption(" · ".join(badges))
+                if row["is_sample"]:
+                    st.warning(
+                        "⚠️ Sample/demo data for this prototype — not a "
+                        "verified real-world resource. Do not rely on this "
+                        "entry for actual help; call 211 or 988 instead.",
+                        icon="⚠️",
+                    )
+                else:
+                    verified_line = "✅ Verified"
+                    if row["last_verified"]:
+                        verified_line += f" as of {row['last_verified']}"
+                    if row["source_url"]:
+                        verified_line += f" · [Official source]({row['source_url']})"
+                    st.caption(verified_line)
             with col_action:
                 phone = row["phone"]
                 digits = "".join(ch for ch in str(phone) if ch.isdigit() or ch == "+")
@@ -283,13 +325,18 @@ def render_map(df: pd.DataFrame, location_input: str):
 
     for _, row in mappable.iterrows():
         color = CATEGORY_COLORS.get(row["category"], "gray")
+        if row["is_sample"]:
+            verification_html = "⚠️ Sample/demo data — not verified"
+        else:
+            verification_html = f"✅ Verified as of {row['last_verified']}" if row["last_verified"] else "✅ Verified"
         popup_html = (
             f"<b>{row['name']}</b><br>"
             f"{row['category']}<br>"
             f"{row['address']}, {row['city']}<br>"
             f"Hours: {row['operating_hours']}<br>"
             f"Phone: {row['phone']}<br>"
-            f"Walk-ins: {'Yes' if row['walk_in_allowed'] else 'No'}"
+            f"Walk-ins: {'Yes' if row['walk_in_allowed'] else 'No'}<br>"
+            f"{verification_html}"
         )
         folium.Marker(
             location=[row["latitude"], row["longitude"]],

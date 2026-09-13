@@ -77,6 +77,23 @@ array) follows this schema:
 | `confidential_support` | boolean | Whether the service guarantees confidential support                 |
 | `latitude`             | float   | Latitude for map placement                                           |
 | `longitude`            | float   | Longitude for map placement                                          |
+| `is_sample`            | boolean | `true` if this is placeholder/demo data, not a verified real-world resource |
+| `source_url`           | string  | Link to the organization's official page confirming these details    |
+| `last_verified`        | string  | `YYYY-MM-DD` date this entry's details were last checked against the source |
+
+If `is_sample`, `source_url`, or `last_verified` is omitted from an entry,
+the loader treats it as **unverified** (`is_sample: true` by default) rather
+than silently displaying it as confirmed. The UI shows a "✅ Verified" badge
+with the source link and date for real entries, and a "⚠️ Sample/demo data"
+warning for placeholder entries — verified entries are always listed first.
+
+As of this writing, the dataset includes verified resources for Frisco,
+Plano, McKinney, and Dallas, TX (each sourced from the organization's own
+website), alongside placeholder Pacific Northwest entries kept for
+demonstration purposes and clearly labeled as sample data. Before relying
+on any entry, confirm details are current — organizations change hours,
+addresses, and phone numbers. Report outdated entries by opening an issue
+or updating `data/resources.json` directly.
 
 The loader in `app.py` fills in sensible defaults for any missing or
 malformed field (e.g. `"Hours not listed"`, `walk_in_allowed: false`) and
@@ -148,11 +165,24 @@ shared or public devices where connection privacy matters.
 
 ## Privacy Notes
 
-- No personal data is collected, logged, or persisted by this application.
-- The dataset in `data/resources.json` is static sample/demo data. Before
-  using this app in a real community setting, replace it with verified,
-  up-to-date local resources and confirm hours, eligibility, and contact
-  details with each organization.
+- The application itself does not ask for a name, create accounts, use
+  tracking cookies, or persist filter selections beyond the current
+  session — this is enforced in code (`app.py` has no database, file
+  write, or analytics call in the request path).
+- That said, this app cannot promise total anonymity, and the UI says so:
+  Streamlit Community Cloud (or whatever host runs it) and the visitor's
+  own network/ISP can see that the page was requested, the same as any
+  website. The map's OpenStreetMap tiles are a third-party embed and may
+  log those tile requests independently of this app.
+- The dataset in `data/resources.json` mixes verified, sourced real-world
+  resources (`is_sample: false`, with a `source_url` and `last_verified`
+  date) with placeholder sample/demo entries (`is_sample: true`) kept for
+  prototyping. The UI labels each accordingly — verified entries surface
+  first, and sample entries carry an explicit "not a verified real-world
+  resource" warning. Before using this app in a real community setting,
+  verify every entry's current hours, eligibility, and contact details
+  directly with the organization, and replace or remove remaining sample
+  entries.
 - Quick Exit clears Streamlit's session state and navigates away, but does
   not clear browser history. Users in high-risk situations should be
   informed to also clear their browser history/tabs as needed.
