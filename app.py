@@ -3,6 +3,7 @@
 import json
 import re
 from datetime import datetime
+from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
@@ -58,6 +59,386 @@ st.set_page_config(
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+    <style>
+    /* ---------- Theme ---------- */
+    :root {
+        --yh-bg: #0B0F17;
+        --yh-panel: rgba(255, 255, 255, 0.03);
+        --yh-border: rgba(255, 255, 255, 0.10);
+        --yh-text: #F1F5F9;
+        --yh-muted: #B0BDCF;
+        --yh-blue: #3B82F6;
+        --yh-green: #10B981;
+        --yh-red: #FF4655;
+        --yh-radius: 20px;
+        --yh-font: "Inter", system-ui, -apple-system,
+                   BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    html {
+        color-scheme: dark;
+    }
+
+    .stApp {
+        background:
+            radial-gradient(
+                ellipse at 85% 0%,
+                rgba(59, 130, 246, 0.08),
+                transparent 42%
+            ),
+            radial-gradient(
+                ellipse at 15% 70%,
+                rgba(16, 185, 129, 0.035),
+                transparent 40%
+            ),
+            var(--yh-bg);
+        color: var(--yh-text);
+        font-family: var(--yh-font);
+    }
+
+    .stApp :is(h1, h2, h3, h4, p, label, input, textarea, button) {
+        font-family: var(--yh-font);
+    }
+
+    .stApp :is(h1, h2, h3, h4) {
+        color: var(--yh-text);
+        letter-spacing: -0.035em;
+    }
+
+    .stApp h1 {
+        font-size: clamp(2rem, 4vw, 3.25rem);
+        font-weight: 750;
+        line-height: 1.12;
+    }
+
+    .stApp p {
+        line-height: 1.65;
+    }
+
+    [data-testid="stCaptionContainer"] p {
+        color: var(--yh-muted);
+        font-size: 0.875rem;
+    }
+
+    [data-testid="stMainBlockContainer"],
+    .main .block-container {
+        max-width: 1280px;
+        padding: 3rem 2.5rem 4rem;
+    }
+
+    /* Hide Streamlit chrome while preserving sidebar access. */
+    [data-testid="stHeader"] {
+        background: transparent;
+        visibility: hidden;
+    }
+
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="collapsedControl"] {
+        visibility: visible !important;
+        color: var(--yh-text);
+        background: var(--yh-bg);
+    }
+
+    #MainMenu,
+    footer,
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"] {
+        display: none !important;
+    }
+
+    /* ---------- Sidebar ---------- */
+    [data-testid="stSidebar"] {
+        background: rgba(13, 19, 30, 0.96);
+        border-right: 1px solid var(--yh-border);
+    }
+
+    [data-testid="stSidebarContent"] {
+        padding-top: 1.25rem;
+    }
+
+    [data-testid="stWidgetLabel"] p {
+        color: #DCE5F1;
+        font-weight: 550;
+        font-size: 0.9rem;
+    }
+
+    /* ---------- Inputs ---------- */
+    [data-testid="stTextInput"] [data-baseweb="input"],
+    [data-testid="stNumberInput"] [data-baseweb="input"],
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div {
+        background: rgba(255, 255, 255, 0.035) !important;
+        border: 1px solid var(--yh-border) !important;
+        border-radius: 12px !important;
+        transition: border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    [data-testid="stTextInput"] input,
+    [data-testid="stNumberInput"] input,
+    [data-testid="stMultiSelect"] input {
+        color: var(--yh-text) !important;
+        caret-color: #93C5FD;
+        background: transparent !important;
+    }
+
+    .stApp input::placeholder {
+        color: #91A0B5;
+        opacity: 1;
+    }
+
+    [data-testid="stTextInput"]:focus-within [data-baseweb="input"],
+    [data-testid="stNumberInput"]:focus-within [data-baseweb="input"],
+    [data-testid="stMultiSelect"]:focus-within [data-baseweb="select"] > div {
+        border-color: rgba(59, 130, 246, 0.8) !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+    }
+
+    [data-testid="stMultiSelect"] [data-baseweb="tag"] {
+        background: rgba(59, 130, 246, 0.15) !important;
+        color: #BFDBFE !important;
+        border: 1px solid rgba(59, 130, 246, 0.25);
+        border-radius: 999px !important;
+    }
+
+    /* ---------- Glass cards ---------- */
+    /* The key selector styles your resource containers directly. */
+    [class*="st-key-resource_"],
+    .yh-card,
+    [data-testid="stMetric"],
+    [data-testid="stExpander"] {
+        background: var(--yh-panel);
+        border: 1px solid var(--yh-border);
+        border-radius: var(--yh-radius);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
+        transition:
+            transform 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease;
+    }
+
+    [class*="st-key-resource_"],
+    .yh-card {
+        padding: 1.4rem;
+        margin-bottom: 0.9rem;
+        position: relative;
+        isolation: isolate;
+    }
+
+    /* A subtle gradient stroke without obscuring card contents. */
+    [class*="st-key-resource_"]::before,
+    .yh-card::before {
+        content: "";
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 1px;
+        background: linear-gradient(
+            125deg,
+            rgba(59, 130, 246, 0.45),
+            rgba(255, 255, 255, 0.06) 45%,
+            rgba(16, 185, 129, 0.22)
+        );
+        -webkit-mask:
+            linear-gradient(#fff 0 0) content-box,
+            linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask:
+            linear-gradient(#fff 0 0) content-box,
+            linear-gradient(#fff 0 0);
+        mask-composite: exclude;
+        pointer-events: none;
+    }
+
+    [data-testid="stExpander"] details {
+        border: 0 !important;
+        background: transparent;
+    }
+
+    [data-testid="stExpander"] summary {
+        min-height: 48px;
+        color: var(--yh-text);
+    }
+
+    [data-testid="stMetric"] {
+        padding: 1.25rem 1.5rem;
+    }
+
+    [data-testid="stMetricLabel"] p {
+        color: var(--yh-muted);
+        font-size: 0.875rem;
+    }
+
+    [data-testid="stMetricValue"] {
+        color: #F8FAFC;
+        font-weight: 700;
+        letter-spacing: -0.045em;
+    }
+
+    /* ---------- Buttons ---------- */
+    [data-testid="stButton"] button,
+    [data-testid="stLinkButton"] a,
+    .yh-button {
+        min-height: 44px;
+        border: 1px solid var(--yh-border);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--yh-text);
+        font-weight: 600;
+        text-decoration: none;
+        transition:
+            transform 180ms ease,
+            background 180ms ease,
+            border-color 180ms ease,
+            box-shadow 180ms ease;
+    }
+
+    /* Your current Quick Exit uses type="primary". */
+    [data-testid="stButton"] button[kind="primary"],
+    .st-key-quick_exit button {
+        background: linear-gradient(135deg, #E93648, #D9213C);
+        color: #FFFFFF;
+        border-color: rgba(255, 125, 135, 0.55);
+        box-shadow:
+            0 0 20px rgba(255, 70, 85, 0.19),
+            inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+
+    /* ---------- Tabs ---------- */
+    [data-baseweb="tab-list"] {
+        gap: 0.35rem;
+        border-bottom: 1px solid var(--yh-border);
+    }
+
+    [data-baseweb="tab"] {
+        min-height: 46px;
+        padding-inline: 1rem;
+        color: var(--yh-muted);
+        border-radius: 10px 10px 0 0;
+    }
+
+    [data-baseweb="tab"][aria-selected="true"] {
+        color: #BFDBFE;
+        background: rgba(59, 130, 246, 0.08);
+    }
+
+    [data-baseweb="tab-highlight"] {
+        background: var(--yh-blue);
+        height: 2px;
+    }
+
+    /* ---------- Reusable pill badges ---------- */
+    .yh-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin: 0.75rem 0;
+    }
+
+    .yh-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.75rem;
+        border: 1px solid var(--yh-border);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.05);
+        color: #DCE5F1;
+        font-size: 0.8rem;
+        font-weight: 550;
+        line-height: 1.4;
+    }
+
+    .yh-badge--blue {
+        color: #BFDBFE;
+        background: rgba(59, 130, 246, 0.12);
+        border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .yh-badge--green {
+        color: #A7F3D0;
+        background: rgba(16, 185, 129, 0.10);
+        border-color: rgba(16, 185, 129, 0.28);
+        box-shadow: 0 0 12px rgba(16, 185, 129, 0.06);
+    }
+
+    .yh-badge--verified {
+        color: #C7D2FE;
+        background: rgba(129, 140, 248, 0.10);
+        border-color: rgba(129, 140, 248, 0.25);
+    }
+
+    /* ---------- Hover and keyboard focus ---------- */
+    @media (hover: hover) and (pointer: fine) {
+        [class*="st-key-resource_"]:hover,
+        .yh-card:hover,
+        [data-testid="stExpander"]:hover {
+            transform: translateY(-2px);
+            border-color: rgba(148, 163, 184, 0.32);
+            box-shadow: 0 16px 42px rgba(0, 0, 0, 0.22);
+        }
+
+        [data-testid="stButton"] button:not(:disabled):hover,
+        [data-testid="stLinkButton"] a:hover,
+        .yh-button:hover {
+            transform: translateY(-2px);
+            border-color: rgba(147, 197, 253, 0.5);
+        }
+
+        [data-testid="stButton"] button[kind="primary"]:hover {
+            border-color: #FDA4AF;
+            box-shadow: 0 0 26px rgba(255, 70, 85, 0.30);
+        }
+    }
+
+    .stApp :is(a, button, input, summary):focus-visible {
+        outline: 3px solid #93C5FD !important;
+        outline-offset: 3px;
+    }
+
+    /* ---------- Mobile and reduced motion ---------- */
+    @media (max-width: 768px) {
+        [data-testid="stMainBlockContainer"],
+        .main .block-container {
+            padding: 3.25rem 1rem 2rem;
+        }
+
+        [class*="st-key-resource_"],
+        .yh-card {
+            padding: 1rem;
+            border-radius: 16px;
+        }
+
+        [data-baseweb="tab-list"] {
+            flex-wrap: wrap;
+        }
+
+        .yh-badge {
+            white-space: normal;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .stApp *,
+        .stApp *::before,
+        .stApp *::after {
+            animation: none !important;
+            transition: none !important;
+            scroll-behavior: auto !important;
+        }
+
+        .stApp *:hover {
+            transform: none !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -205,6 +586,7 @@ def render_header():
             help="Leaves this page. Does not erase browser history.",
             use_container_width=True,
             type="primary",
+            key="quick_exit",
         ):
             quick_exit()
         st.caption("Leaves this page. Does not erase browser history.")
@@ -412,10 +794,31 @@ def render_directory(
     view = view.sort_values(by=["is_sample", "name"], ascending=[True, True])
 
     for _, row in view.iterrows():
-        with st.container(border=True):
+        with st.container(
+            border=False,
+            key=f"resource_{key_prefix}_{row['id']}",
+        ):
             col_info, col_action = st.columns([4, 1])
             with col_info:
                 st.markdown(f"**{row['name']}**  \n*{row['category']}*")
+
+                badges = []
+                if str(row["operating_hours"]).strip() == "24/7":
+                    badges.append('<span class="yh-badge yh-badge--blue">24/7 service</span>')
+                if str(row["cost"]).strip().lower() == "free":
+                    badges.append('<span class="yh-badge yh-badge--green">Free</span>')
+                if row["is_verified"]:
+                    badges.append(
+                        '<span class="yh-badge yh-badge--verified">'
+                        f"Last verified: {escape(str(row['last_verified']))}"
+                        "</span>"
+                    )
+                if badges:
+                    st.markdown(
+                        '<div class="yh-badges">' + "".join(badges) + "</div>",
+                        unsafe_allow_html=True,
+                    )
+
                 st.markdown(f"📍 {row['address']}, {row['city']}")
                 st.markdown(f"🕒 {row['operating_hours']}  |  👥 Ages {row['age_range']}")
                 st.markdown(f"💲 {row['cost']}")

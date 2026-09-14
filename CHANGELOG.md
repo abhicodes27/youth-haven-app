@@ -5,6 +5,51 @@ scatter that history across commit messages, this file keeps a record of
 what was flagged, what changed in response, and what was verified — so a
 future contributor (or reviewer) can see the reasoning, not just the diff.
 
+## Round 7 — Dark theme, glass cards, and pill badges
+
+**Request:** apply a supplied custom-CSS block (dark theme, glass-panel
+resource cards, red Quick Exit styling, hover effects, keyboard focus
+indicators, mobile spacing, and reduced-motion support) plus two small
+integration changes — give each resource card a `key` via
+`st.container(key=...)` so the CSS can target it, and add small pill
+badges (24/7, Free, Last verified) built from data already on the card.
+
+**Changes**
+
+- Injected the supplied stylesheet via `st.markdown(..., unsafe_allow_html=True)`
+  immediately after `st.set_page_config(...)`.
+- Changed each resource card's `st.container(border=True)` to
+  `st.container(border=False, key=f"resource_{key_prefix}_{row['id']}")`
+  so Streamlit's `st-key-resource_*` class lets the CSS style it directly
+  (the container-key mechanism the CSS's comment referenced).
+- Added the badges block inside `col_info`, using `row["is_verified"]`
+  (the flag introduced in Round 6) rather than recomputing the same
+  "is_sample false + source + date" condition inline, so there's one
+  source of truth for what counts as verified.
+- Gave the Quick Exit button an explicit `key="quick_exit"` so the CSS's
+  `.st-key-quick_exit button` selector has something to match, in
+  addition to the broader `[kind="primary"]` selector it also uses (this
+  app only has the one primary-type button, so both work; the key makes
+  it exact rather than incidental).
+
+**Testing performed:** wrote a new Playwright suite for the styling
+itself — confirmed the dark radial-gradient background and text color
+are actually applied to `.stApp`, the `st-key-resource_*` class exists
+and carries the glass-panel background/border, the Free/Last-verified
+badges render in the page HTML, the Quick Exit button gets its red
+gradient and its wrapper carries `st-key-quick_exit`, a focused Call
+link gets a visible focus outline, the `prefers-reduced-motion` media
+query is present in the injected stylesheet, and no external font file
+was requested (Inter falls back to system fonts, as intended). Measured
+contrast against the *actual* visible background this time — an early,
+wrong version of this check measured against `document.body`, which is
+white but now sits entirely hidden behind the new opaque `.stApp`
+background; against the real backdrop, contrast is 15.09:1. Then
+re-ran every prior round's regression suite (logic tests, Round 4's,
+Round 6's, and the persona scenarios) against the restyled app with
+zero breakage — the visual changes didn't touch any of the underlying
+filtering, search, verification, or access-control logic.
+
 ## Round 6 — Six concrete correctness bugs
 
 **Feedback:** ZIP search silently does nothing (only `city` was matched);
